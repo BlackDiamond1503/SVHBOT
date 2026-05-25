@@ -10,7 +10,7 @@ intents.message_content = True  # For prefix commands
 intents.members = True          # If you need member info
 
 load_dotenv()
-token = os.getenv("TOKEN")
+token = os.environ["TOKEN"]
 
 # Create the bot instance
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)  # Remove default help if custom
