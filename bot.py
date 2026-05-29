@@ -1,8 +1,29 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, ui
 from dotenv import load_dotenv
 import os
+import json
+
+# report related shit
+reports_file_path = "reports.json"
+
+report_data = {
+    "count": 0,
+    "id": 0,
+    "pending": [],
+    "reports": []
+}
+def load_reports():
+    global report_data
+    if os.path.exists(reports_file_path):
+        try:
+            with open(reports_file_path, "r", encoding = "utf-8") as f:
+                report_data = json.load(f)
+        except Exception as e:
+            print(f"Error loading reports: {e}")
+
+load_reports()
 
 # Intents are required
 intents = discord.Intents.default()
@@ -10,7 +31,7 @@ intents.message_content = True  # For prefix commands
 intents.members = True          # If you need member info
 
 load_dotenv()
-token = os.environ["DISCORD_TOKEN"]
+token = os.getenv("DISCORD_TOKEN")
 
 # Create the bot instance
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)  # Remove default help if custom
@@ -20,15 +41,124 @@ async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     await bot.tree.sync()
 
-@bot.tree.command(name='hello', description='Says hello!')
-async def hello(interaction: discord.Interaction, user: discord.Member):
-    await interaction.response.send_message(f'Hello, {user.mention}!')
+@bot.event
+async def on_message(message:discord.Message):
+    if message.mentions and message.mentions[0].id == 1507794999352234114:
+        print(message.content)
+        content = message.content.strip()
+        bot_mention = f"<@{bot.user.id}>"
+        bot_mention2 = f"<@!{bot.user.id}>"
 
-@bot.tree.command(name="report", description="create a report for an user")
+        if content.startswith(bot_mention):
+            clean_content = content[len(bot_mention):].strip()
+        elif content.startswith(bot_mention2):
+            clean_content = content[len(bot_mention2):].strip()
+        else:
+            return
+        
+        message.content = clean_content
+        bot.process_commands(message)
+
+@bot.command(name='hello', description='Says hello!')
+async def hello(ctx:commands.Context, user: discord.Member):
+    if not(any(role.name == "Lower ADMIN" for role in ctx.author.roles)):
+        await ctx.send(f'Hello, {user.mention}!')
+    else:
+        await ctx.send(ephemeral=True, content="Error, you have no permissions for this command")
+
+class ReportModal(ui.Modal, title="User Report Form"):
+    
+    reportedid = 0
+
+    reported_user = ui.TextInput(
+        label="User ID to report (Don't change)",
+        placeholder="123456789012345678",
+        required=True,
+        max_length=100
+    )
+
+    reason = ui.TextInput(
+        label="Report Reason",
+        placeholder="spam, harassment, toxicity, etc...",
+        required=True,
+        max_length=200
+    )
+
+    context = ui.TextInput(
+        label="Context (Optional)",
+        placeholder="Explain what happened...",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        global report_data
+        # Get the report channel
+        report_channel = interaction.client.get_channel(1508581321210073289)
+        
+        if not report_channel:
+            await interaction.response.send_message("Report channel not found!", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title = f"User Report | ID: {report_data["id"]}",
+            color = discord.Color.red()
+        )
+
+        embed.add_field(name="Reported By", value=interaction.user.mention, inline=False)
+        embed.add_field(name="User Reported", value=bot.get_user(self.reportedid).mention, inline=False)
+        embed.add_field(name="Reason", value=self.reason.value, inline=False)
+        context_value = self.context.value.strip() if self.context.value else "No context provided"
+        embed.add_field(name="Context", value=context_value, inline=False)
+
+        await report_channel.send(embed=embed)  
+        await interaction.response.send_message("Your report has been submitted successfully!", ephemeral=True)
+        report_data["count"] += 1
+        report_data["pending"].append(report_data["id"])
+        report_data["reports"].append({"reported":self.reported_user.value, "reason":self.reason.value, "context":context_value})
+        report_data["id"] += 1
+        with open(reports_file_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent = 4, ensure_ascii = False)
+        load_reports()
+
+@bot.tree.command(name = "cleanup", description = "Delete a specific number of messages in this channel")
+@app_commands.default_permissions(manage_messages = True)
+async def cleanup(interaction: discord.Interaction, amount: int):
+    if amount < 1:
+        await interaction.response.send_message("Amount must be at least 1.", ephemeral=True)
+        return
+    
+    if amount > 1000:
+        await interaction.response.send_message("Maximum amount is 1000 messages.", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True) 
+    try:
+        deleted = await interaction.channel.purge(limit=amount,bulk=True, reason=f"Cleanup command by {interaction.user}")
+        count = len(deleted)
+        success_embed = discord.Embed(title="Cleanup Complete",description=f"Successfully deleted **{count}** messages.",color=discord.Color.green())
+        await interaction.followup.send(embed=success_embed, ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("I don't have permission to delete messages.", ephemeral=True)
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"Error during cleanup: {e}", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"Unexpected error: {e}", ephemeral=True)
+
+@bot.tree.command(name = "report", description="Report a user")
 @app_commands.default_permissions(administrator=True)
 async def report(interaction: discord.Interaction, user: discord.Member):
-    test_channel = bot.get_channel(1507810520143630376)
-    await test_channel.send("report message test")
+    """Opens the report modal"""
+    
+    modal = ReportModal()
+    modal.reportedid = user.id
+    # Optional: Pre-fill the reported user field with the selected user
+    modal.reported_user.default = f"{user.name}"
+    
+    await interaction.response.send_modal(modal)
+
+
 
 # Looking To Play Command Shit
 game_options = [
@@ -65,6 +195,5 @@ async def looking_to_play(interaction: discord.Interaction, game: str, mode: str
         elif mode == "any":         message = f"{interaction.user.mention} wants to have a **Hunt** of any modality in {game_to_play}! And he needs {players} players!"
 
     await ltp_channel.send(upper_message, embed=discord.Embed(title=title, description=message).set_image(url=image))
-
 
 bot.run(token)
