@@ -38,6 +38,7 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)  # Re
 
 @bot.event
 async def on_ready():
+    await bot.load_extension("cogs.commands")
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     await bot.tree.sync()
 
