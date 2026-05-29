@@ -60,12 +60,7 @@ async def on_message(message:discord.Message):
         message.content = clean_content
         bot.process_commands(message)
 
-@bot.command(name='hello', description='Says hello!')
-async def hello(ctx:commands.Context, user: discord.Member):
-    if not(any(role.name == "Lower ADMIN" for role in ctx.author.roles)):
-        await ctx.send(f'Hello, {user.mention}!')
-    else:
-        await ctx.send(ephemeral=True, content="Error, you have no permissions for this command")
+
 
 class ReportModal(ui.Modal, title="User Report Form"):
     
@@ -123,29 +118,7 @@ class ReportModal(ui.Modal, title="User Report Form"):
             json.dump(report_data, f, indent = 4, ensure_ascii = False)
         load_reports()
 
-@bot.tree.command(name = "cleanup", description = "Delete a specific number of messages in this channel")
-@app_commands.default_permissions(manage_messages = True)
-async def cleanup(interaction: discord.Interaction, amount: int):
-    if amount < 1:
-        await interaction.response.send_message("Amount must be at least 1.", ephemeral=True)
-        return
-    
-    if amount > 1000:
-        await interaction.response.send_message("Maximum amount is 1000 messages.", ephemeral=True)
-        return
-    
-    await interaction.response.defer(ephemeral=True) 
-    try:
-        deleted = await interaction.channel.purge(limit=amount,bulk=True, reason=f"Cleanup command by {interaction.user}")
-        count = len(deleted)
-        success_embed = discord.Embed(title="Cleanup Complete",description=f"Successfully deleted **{count}** messages.",color=discord.Color.green())
-        await interaction.followup.send(embed=success_embed, ephemeral=True)
-    except discord.Forbidden:
-        await interaction.followup.send("I don't have permission to delete messages.", ephemeral=True)
-    except discord.HTTPException as e:
-        await interaction.followup.send(f"Error during cleanup: {e}", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"Unexpected error: {e}", ephemeral=True)
+
 
 @bot.tree.command(name = "report", description="Report a user")
 @app_commands.default_permissions(administrator=True)
