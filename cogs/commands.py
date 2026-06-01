@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands
 from ReportModal import ReportModal
 from ModeEnums import GameModeType, GameType
-import ModeData
 
 class Commands(commands.Cog):
     def __init__(self, bot):

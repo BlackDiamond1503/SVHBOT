@@ -1,8 +1,14 @@
 import discord
 from discord import ui
+import Tools
 
 class ReportModal(ui.Modal, title="User Report Form"):
     
+    def __init__(self, bot_instance):
+        self.bot = bot_instance
+        self.report = {}
+        self.reporter = Tools.ReportFile("reports.json")
+
     reportedid = 0
 
     reported_user = ui.TextInput(
@@ -28,7 +34,6 @@ class ReportModal(ui.Modal, title="User Report Form"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        global report_data
         # Get the report channel
         report_channel = interaction.client.get_channel(1508581321210073289)
         
@@ -37,22 +42,17 @@ class ReportModal(ui.Modal, title="User Report Form"):
             return
 
         embed = discord.Embed(
-            title = f"User Report | ID: {report_data["id"]}",
+            title = "User Report",
             color = discord.Color.red()
         )
 
         embed.add_field(name="Reported By", value=interaction.user.mention, inline=False)
-        embed.add_field(name="User Reported", value=bot.get_user(self.reportedid).mention, inline=False)
+        embed.add_field(name="User Reported", value=self.bot.get_user(self.reportedid).mention, inline=False)
         embed.add_field(name="Reason", value=self.reason.value, inline=False)
         context_value = self.context.value.strip() if self.context.value else "No context provided"
         embed.add_field(name="Context", value=context_value, inline=False)
 
+        self.report = {"reported":self.reportedid, "reason":self.reason.value, "context":self.context.value, }
+
         await report_channel.send(embed=embed)  
         await interaction.response.send_message("Your report has been submitted successfully!", ephemeral=True)
-        report_data["count"] += 1
-        report_data["pending"].append(report_data["id"])
-        report_data["reports"].append({"reported":self.reported_user.value, "reason":self.reason.value, "context":context_value})
-        report_data["id"] += 1
-        with open(reports_file_path, "w", encoding="utf-8") as f:
-            json.dump(report_data, f, indent = 4, ensure_ascii = False)
-        load_reports()
